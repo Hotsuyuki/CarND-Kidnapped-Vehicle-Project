@@ -66,9 +66,14 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 	for (unsigned int i=0; i<num_particles; i++) {
 		// Predict the new state
-		particles[i].x += velocity * cos(particles[i].theta) * delta_t;
-		particles[i].y += velocity * sin(particles[i].theta) * delta_t;
-		particles[i].theta += yaw_rate * delta_t;
+		if (0.001 < fabs(yaw_rate)) {
+			particles[i].x += velocity / yaw_rate * ( sin(particles[i].theta+yaw_rate*delta_t) - sin(particles[i].theta) );
+			particles[i].y += velocity / yaw_rate * ( cos(particles[i].theta) - cos(particles[i].theta+yaw_rate*delta_t) );
+			particles[i].theta += yaw_rate * delta_t;
+		} else {
+			particles[i].x += velocity * cos(particles[i].theta) * delta_t;
+			particles[i].y += velocity * sin(particles[i].theta) * delta_t;
+		}
 
 		// Add noise
 		particles[i].x += noise_x(gen);
@@ -164,30 +169,17 @@ void ParticleFilter::resample() {
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
 
-	// Init beta
+	// Init discrete distribution with particles' weights
 	std::vector<double> weights;
 	for (unsigned int i=0; i<num_particles; i++) {
 		weights.push_back(particles[i].weight);
 	}
-	double max_weight = *max_element(weights.begin(), weights.end());
-	uniform_real_distribution<double> randreal(0.0, 2*max_weight);
-	double beta = 0.0;
+	std::discrete_distribution<int> dist{weights.begin(), weights.end()};
 
-	// Init index
-	uniform_int_distribution<int> randint(0, num_particles-1);
-	int idx = randint(gen);
-
-	// Resampling the particles
+	// Resampling
 	std::vector<Particle> tmp_particles;
 	for (unsigned int i=0; i<num_particles; i++) {
-		beta += randreal(gen);
-
-		while (weights[idx] < beta) {
-			beta -= weights[idx];
-			idx = (idx+1) % num_particles;
-		}
-
-		tmp_particles.push_back(particles[idx]);
+		tmp_particles.push_back(particles[dist(gen)]);
 	}
 
 	particles = tmp_particles;
